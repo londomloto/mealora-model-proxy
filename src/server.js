@@ -7,6 +7,7 @@ const rateLimiter = require('./rateLimiter');
 const {
   extractLabel,
   recognizeFoodComponents,
+  parseFoodTextGemini,
   ProviderTimeoutError,
   ProviderError,
 } = require('./geminiClient');
@@ -90,6 +91,47 @@ function registerVisionRoute(path, modelCall) {
 registerVisionRoute('/extract-label', extractLabel);
 // change 011-food-photo-input, task 2.1.
 registerVisionRoute('/recognize-food-components', recognizeFoodComponents);
+
+// change 012-voice-food-input: transcript text only, never audio.
+// Same token check, rate limit and error mapping as the image routes.
+app.post('/parse-food-text', checkSharedToken, express.json({ limit: '4kb' }), async (req, res) => {
+  const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+  if (!text || text.length > config.maxParseTextChars) {
+    return res.status(400).json({ error: 'INVALID_TEXT' });
+  }
+
+  const reservation = rateLimiter.checkAndReserve();
+  if (!reservation.allowed) {
+    return res.status(429).json({ error: 'LIMIT_EXCEEDED' });
+  }
+
+  const startedAt = Date.now();
+  try {
+    const { result, usage } = await parseFoodTextGemini({ text });
+    const ms = Date.now() - startedAt;
+    // Metadata only: never the transcript or the parsed items.
+    console.log(JSON.stringify({ route: '/parse-food-text', status: 200, ms, ...usage }));
+    if (usage.inputTokens != null) res.set('X-Usage-Input-Tokens', String(usage.inputTokens));
+    if (usage.outputTokens != null) res.set('X-Usage-Output-Tokens', String(usage.outputTokens));
+    return res.json(result);
+  } catch (err) {
+    const ms = Date.now() - startedAt;
+    if (err instanceof ProviderTimeoutError) {
+      console.log(JSON.stringify({ route: '/parse-food-text', status: 504, ms }));
+      return res.status(504).json({ error: 'PROVIDER_TIMEOUT' });
+    }
+    const status = err instanceof ProviderError ? 502 : 500;
+    console.error(
+      JSON.stringify({
+        route: '/parse-food-text',
+        status,
+        ms,
+        providerError: String(err.message).slice(0, 500),
+      }),
+    );
+    return res.status(status).json({ error: 'PROVIDER_ERROR' });
+  }
+});
 
 app.listen(config.port, () => {
   console.log(`mealora-model-proxy listening on :${config.port}`);

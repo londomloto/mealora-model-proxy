@@ -26,6 +26,10 @@ full design rationale and limits.
 - `POST /recognize-food-components` — same request/response shape as
   `/extract-label`, field `image`; returns proposed food components (see
   `src/schema.js`), change 011.
+- `POST /parse-food-text` — JSON `{ "text": "..." }` (≤ `MAX_PARSE_TEXT_CHARS`), change 012.
+  Transcript text only, never audio. Returns proposed food items with amount and unit
+  (see `src/schema.js`), never nutrition. Uses `GEMINI_TEXT_MODEL` (falls back to `GEMINI_MODEL`). Extra error:
+  `400 { "error": "INVALID_TEXT" }`.
 - `GET /health` — liveness + current day's usage counters.
 
 The mobile client maps every error code to the same plain-language,

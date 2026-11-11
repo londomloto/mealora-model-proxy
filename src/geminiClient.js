@@ -4,25 +4,24 @@ const {
   EXTRACTION_PROMPT,
   COMPONENT_RECOGNITION_RESPONSE_SCHEMA,
   COMPONENT_RECOGNITION_PROMPT,
+  FOOD_TEXT_PARSE_RESPONSE_SCHEMA,
+  FOOD_TEXT_PARSE_PROMPT,
 } = require('./schema');
 
 class ProviderTimeoutError extends Error {}
 class ProviderError extends Error {}
 
-async function callGemini({ prompt, responseSchema, imageBuffer, mimeType }) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${config.geminiModel}:generateContent?key=${config.geminiApiKey}`;
+async function callGemini({ prompt, responseSchema, imageBuffer, mimeType, userText, model = config.geminiModel }) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`;
 
   const body = {
     contents: [
       {
         parts: [
           { text: prompt },
-          {
-            inline_data: {
-              mime_type: mimeType,
-              data: imageBuffer.toString('base64'),
-            },
-          },
+          imageBuffer
+            ? { inline_data: { mime_type: mimeType, data: imageBuffer.toString('base64') } }
+            : { text: `<kalimat>\n${userText}\n</kalimat>` },
         ],
       },
     ],
@@ -63,15 +62,23 @@ async function callGemini({ prompt, responseSchema, imageBuffer, mimeType }) {
     throw new ProviderError('Gemini response missing structured output');
   }
 
+  const usage = {
+    inputTokens: payload?.usageMetadata?.promptTokenCount ?? null,
+    outputTokens: payload?.usageMetadata?.candidatesTokenCount ?? null,
+  };
   try {
-    return JSON.parse(text);
+    return { result: JSON.parse(text), usage };
   } catch {
     throw new ProviderError('Gemini returned non-JSON output');
   }
 }
 
+async function callGeminiResult(args) {
+  return (await callGemini(args)).result;
+}
+
 async function extractLabel({ imageBuffer, mimeType }) {
-  return callGemini({
+  return callGeminiResult({
     prompt: EXTRACTION_PROMPT,
     responseSchema: EXTRACTION_RESPONSE_SCHEMA,
     imageBuffer,
@@ -83,7 +90,7 @@ async function extractLabel({ imageBuffer, mimeType }) {
 // (different prompt/schema), same transport, same timeout/error handling —
 // reusing `image-ai-access` as-is per design.md D2.
 async function recognizeFoodComponents({ imageBuffer, mimeType }) {
-  return callGemini({
+  return callGeminiResult({
     prompt: COMPONENT_RECOGNITION_PROMPT,
     responseSchema: COMPONENT_RECOGNITION_RESPONSE_SCHEMA,
     imageBuffer,
@@ -91,8 +98,20 @@ async function recognizeFoodComponents({ imageBuffer, mimeType }) {
   });
 }
 
+// change 012-voice-food-input: text-only parsing, same transport and limits.
+// Only the transcript text is sent, never audio (design.md D1/D3).
+async function parseFoodTextGemini({ text }) {
+  return callGemini({
+    prompt: FOOD_TEXT_PARSE_PROMPT,
+    responseSchema: FOOD_TEXT_PARSE_RESPONSE_SCHEMA,
+    userText: text,
+    model: config.geminiTextModel,
+  });
+}
+
 module.exports = {
   extractLabel,
+  parseFoodTextGemini,
   recognizeFoodComponents,
   ProviderTimeoutError,
   ProviderError,
