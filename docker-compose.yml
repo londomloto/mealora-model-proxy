@@ -1,0 +1,12 @@
+services:
+  mealora-vision-proxy:
+    build: .
+    container_name: mealora-vision-proxy
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8787:8787"
+    # If an nginx/Caddy reverse proxy already runs on this droplet, remove the
+    # ports mapping above and instead point that reverse proxy's upstream at
+    # mealora-vision-proxy:8787 on the same Docker network.
