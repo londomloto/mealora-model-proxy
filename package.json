@@ -1,8 +1,8 @@
 {
-  "name": "mealora-vision-proxy",
+  "name": "mealora-model-proxy",
   "version": "0.1.0",
   "private": true,
-  "description": "Minimal inference-only proxy for Mealora nutrition label extraction. Holds the vision provider API key server-side; stores no images, no results, no user data.",
+  "description": "Minimal inference-only proxy for Mealora's AI model calls (nutrition label extraction, food photo component recognition). Holds the model provider API key server-side; stores no images, no results, no user data.",
   "type": "commonjs",
   "main": "src/server.js",
   "scripts": {

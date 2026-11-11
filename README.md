@@ -1,11 +1,13 @@
-# mealora-vision-proxy
+# mealora-model-proxy
 
-Minimal inference-only proxy for Mealora's nutrition label extraction
-(`openspec/changes/010-nutrition-label-extraction` in `mealora-plans`). It holds
-the Gemini API key server-side so it never ships inside the Mealora mobile app.
+Minimal inference-only proxy for Mealora's AI model calls — nutrition label
+extraction (`openspec/changes/010-nutrition-label-extraction` in
+`mealora-plans`) and food photo component recognition
+(`openspec/changes/011-food-photo-input`). It holds the Gemini API key
+server-side so it never ships inside the Mealora mobile app.
 
-Scope is deliberately narrow: receive one label photo, call Gemini, return
-structured JSON. It stores nothing — no images, no extraction results, no user
+Scope is deliberately narrow: receive one image, call Gemini, return
+structured JSON. It stores nothing — no images, no results, no user
 identity, no accounts. See `docs/inference-proxy.md` in `mealora-plans` for the
 full design rationale and limits.
 
@@ -21,6 +23,9 @@ full design rationale and limits.
   - `429` — `{ "error": "LIMIT_EXCEEDED" }` (daily request/cost cap hit)
   - `502` — `{ "error": "PROVIDER_ERROR" }`
   - `504` — `{ "error": "PROVIDER_TIMEOUT" }`
+- `POST /recognize-food-components` — same request/response shape as
+  `/extract-label`, field `image`; returns proposed food components (see
+  `src/schema.js`), change 011.
 - `GET /health` — liveness + current day's usage counters.
 
 The mobile client maps every error code to the same plain-language,
@@ -46,7 +51,7 @@ docker compose up -d --build
 
 If nginx/Caddy already runs on the droplet, drop the `ports:` mapping in
 `docker-compose.yml` and point the existing reverse proxy's upstream at
-`mealora-vision-proxy:8787` on the shared Docker network instead of
+`mealora-model-proxy:8787` on the shared Docker network instead of
 exposing the port directly.
 
 ## What this is not

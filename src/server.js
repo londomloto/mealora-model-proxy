@@ -92,5 +92,5 @@ registerVisionRoute('/extract-label', extractLabel);
 registerVisionRoute('/recognize-food-components', recognizeFoodComponents);
 
 app.listen(config.port, () => {
-  console.log(`mealora-inference-proxy listening on :${config.port}`);
+  console.log(`mealora-model-proxy listening on :${config.port}`);
 });
