@@ -30,6 +30,25 @@ full design rationale and limits.
   Transcript text only, never audio. Returns proposed food items with amount and unit
   (see `src/schema.js`), never nutrition. Uses `GEMINI_TEXT_MODEL` (falls back to `GEMINI_MODEL`). Extra error:
   `400 { "error": "INVALID_TEXT" }`.
+- `GET /app-config` — public app version config (change 017), **no token, no
+  model rate limit**. Response:
+  `{ "latestVersion", "minSupportedVersion", "releaseNotes", "storeUrl": { "android", "ios" } }`
+  (whitelisted fields only). `404 { "error": "APP_CONFIG_UNSET" }` when
+  `APP_LATEST_VERSION`/`APP_MIN_SUPPORTED_VERSION` are both empty; the app then
+  stays fail-open. The server refuses to start on an invalid version format,
+  min > latest, or a non-`https` store URL.
+
+  ```bash
+  curl -i http://localhost:8787/app-config
+  ```
+
+  Release procedure:
+  - On every app version bump, set `APP_LATEST_VERSION` (no build number) and
+    `APP_RELEASE_NOTES` — but only once the build is live in the stores.
+  - Change `APP_MIN_SUPPORTED_VERSION` only deliberately: every older app is
+    blocked until it updates. Rollback = lower it (or empty both versions) and redeploy.
+  - Leave `APP_STORE_URL_IOS` empty until the iOS app is published; iOS then
+    shows no update UI.
 - `GET /health` — liveness + current day's usage counters.
 
 The mobile client maps every error code to the same plain-language,

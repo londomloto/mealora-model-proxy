@@ -4,6 +4,7 @@ const multer = require('multer');
 
 const config = require('./config');
 const rateLimiter = require('./rateLimiter');
+const { appConfigHandler } = require('./appConfig');
 const {
   extractLabel,
   recognizeFoodComponents,
@@ -28,6 +29,9 @@ function checkSharedToken(req, res, next) {
   }
   next();
 }
+
+// change 017: public, no shared token, no model rate limit.
+app.get('/app-config', appConfigHandler(config.appConfig));
 
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', usage: rateLimiter.currentUsage() });
