@@ -77,6 +77,46 @@ If nginx/Caddy already runs on the droplet, drop the `ports:` mapping in
 `mealora-model-proxy:8787` on the shared Docker network instead of
 exposing the port directly.
 
+### Without Docker (pm2)
+
+Production currently runs this way: Node via nvm + pm2, reverse-proxied by
+Nginx Proxy Manager at `https://cms.koorva.com/mealora` (custom location
+`/mealora/` → port 8787, forward host ends with `/` so the prefix is stripped).
+
+First install:
+
+```bash
+git clone https://github.com/londomloto/mealora-model-proxy.git
+cd mealora-model-proxy
+npm ci --omit=dev
+cp .env.example .env && chmod 600 .env
+# edit .env, set GEMINI_API_KEY and PROXY_SHARED_TOKEN (openssl rand -hex 32)
+npm i -g pm2
+pm2 start src/server.js --name mealora-model-proxy
+pm2 save
+pm2 startup   # registers pm2-root systemd service so it survives reboot
+```
+
+Update:
+
+```bash
+git pull && npm ci --omit=dev && pm2 restart mealora-model-proxy
+```
+
+After editing `.env`:
+
+```bash
+pm2 restart mealora-model-proxy --update-env
+```
+
+Useful:
+
+```bash
+pm2 status
+pm2 logs mealora-model-proxy --lines 100
+curl -s localhost:8787/health
+```
+
 ## What this is not
 
 No database, no auth/accounts, no sync, no image or result storage. If any of
