@@ -40,6 +40,8 @@ const config = {
   providerTimeoutMs: intEnv('PROVIDER_TIMEOUT_MS', 20000),
   maxImageBytes: intEnv('MAX_IMAGE_BYTES', 8 * 1024 * 1024),
   maxParseTextChars: intEnv('MAX_PARSE_TEXT_CHARS', 500),
+  // change 020: pasted nutrition text (articles, search answers) is longer.
+  maxNutritionTextChars: intEnv('MAX_NUTRITION_TEXT_CHARS', 4000),
   // change 017: null when APP_*_VERSION unset (GET /app-config -> 404).
   appConfig: loadAppConfig(process.env),
 };

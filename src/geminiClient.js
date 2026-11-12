@@ -6,12 +6,25 @@ const {
   COMPONENT_RECOGNITION_PROMPT,
   FOOD_TEXT_PARSE_RESPONSE_SCHEMA,
   FOOD_TEXT_PARSE_PROMPT,
+  NUTRITION_READING_SCHEMA,
+  NUTRITION_TEXT_PROMPT,
+  NUTRITION_IMAGE_PROMPT,
 } = require('./schema');
 
 class ProviderTimeoutError extends Error {}
 class ProviderError extends Error {}
 
-async function callGemini({ prompt, responseSchema, imageBuffer, mimeType, userText, model = config.geminiModel }) {
+// `wrapTag` names the data-only tag around user text. It defaults to the
+// change-012 tag so /parse-food-text keeps its exact prompt.
+async function callGemini({
+  prompt,
+  responseSchema,
+  imageBuffer,
+  mimeType,
+  userText,
+  wrapTag = 'kalimat',
+  model = config.geminiModel,
+}) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`;
 
   const body = {
@@ -21,7 +34,7 @@ async function callGemini({ prompt, responseSchema, imageBuffer, mimeType, userT
           { text: prompt },
           imageBuffer
             ? { inline_data: { mime_type: mimeType, data: imageBuffer.toString('base64') } }
-            : { text: `<kalimat>\n${userText}\n</kalimat>` },
+            : { text: `<${wrapTag}>\n${userText}\n</${wrapTag}>` },
         ],
       },
     ],
@@ -109,7 +122,30 @@ async function parseFoodTextGemini({ text }) {
   });
 }
 
+// change 020-paste-nutrition-text: free-text nutrition reading. Only text is
+// sent; the same core rules as the image route (design D1/D2).
+async function parseNutritionTextGemini({ text }) {
+  return callGemini({
+    prompt: NUTRITION_TEXT_PROMPT,
+    responseSchema: NUTRITION_READING_SCHEMA,
+    userText: text,
+    wrapTag: 'teks',
+    model: config.geminiTextModel,
+  });
+}
+
+async function readNutritionImageGemini({ imageBuffer, mimeType }) {
+  return callGeminiResult({
+    prompt: NUTRITION_IMAGE_PROMPT,
+    responseSchema: NUTRITION_READING_SCHEMA,
+    imageBuffer,
+    mimeType,
+  });
+}
+
 module.exports = {
+  parseNutritionTextGemini,
+  readNutritionImageGemini,
   extractLabel,
   parseFoodTextGemini,
   recognizeFoodComponents,

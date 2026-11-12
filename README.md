@@ -30,6 +30,15 @@ full design rationale and limits.
   Transcript text only, never audio. Returns proposed food items with amount and unit
   (see `src/schema.js`), never nutrition. Uses `GEMINI_TEXT_MODEL` (falls back to `GEMINI_MODEL`). Extra error:
   `400 { "error": "INVALID_TEXT" }`.
+- `POST /parse-nutrition-text` — JSON `{ "text": "..." }` (≤ `MAX_NUTRITION_TEXT_CHARS`,
+  default 4000; body ≤ 32kb), change 020. Pasted or OCR'd text only. Returns a
+  nutrition reading (see `NUTRITION_READING_SCHEMA` in `src/schema.js`): raw
+  `min`/`max` per nutrient with `read | range | unread`, basis, ignored nutrients
+  and `sourceKind`. The app computes midpoints. Same errors as `/parse-food-text`.
+- `POST /read-nutrition-image` — multipart field `image`, same limits and errors
+  as `/extract-label`, change 020. Same reading shape as `/parse-nutrition-text`,
+  for package labels, laptop screens and articles. `/extract-label` is unchanged
+  and keeps serving older app versions.
 - `GET /app-config` — public app version config (change 017), **no token, no
   model rate limit**. Response:
   `{ "latestVersion", "minSupportedVersion", "releaseNotes", "storeUrl": { "android", "ios" } }`
