@@ -12,7 +12,14 @@ const {
 } = require('./schema');
 
 class ProviderTimeoutError extends Error {}
-class ProviderError extends Error {}
+class ProviderError extends Error {
+  // `status` is the upstream HTTP status when there was one (used by the
+  // provider chain to decide cooldown); undefined for network/output errors.
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
 
 // `wrapTag` names the data-only tag around user text. It defaults to the
 // change-012 tag so /parse-food-text keeps its exact prompt.
@@ -24,6 +31,7 @@ async function callGemini({
   userText,
   wrapTag = 'kalimat',
   model = config.geminiModel,
+  timeoutMs = config.providerTimeoutMs,
 }) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`;
 
@@ -45,7 +53,7 @@ async function callGemini({
   };
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), config.providerTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   let response;
   try {
@@ -66,7 +74,7 @@ async function callGemini({
 
   if (!response.ok) {
     const detail = await response.text().catch(() => '');
-    throw new ProviderError(`Gemini returned ${response.status}: ${detail.slice(0, 200)}`);
+    throw new ProviderError(`Gemini returned ${response.status}: ${detail.slice(0, 200)}`, response.status);
   }
 
   const payload = await response.json();
@@ -90,8 +98,9 @@ async function callGeminiResult(args) {
   return (await callGemini(args)).result;
 }
 
-async function extractLabel({ imageBuffer, mimeType }) {
+async function extractLabel({ imageBuffer, mimeType, timeoutMs }) {
   return callGeminiResult({
+    timeoutMs,
     prompt: EXTRACTION_PROMPT,
     responseSchema: EXTRACTION_RESPONSE_SCHEMA,
     imageBuffer,
@@ -102,8 +111,9 @@ async function extractLabel({ imageBuffer, mimeType }) {
 // change 011-food-photo-input, task 2.1: separate task from `extractLabel`
 // (different prompt/schema), same transport, same timeout/error handling —
 // reusing `image-ai-access` as-is per design.md D2.
-async function recognizeFoodComponents({ imageBuffer, mimeType }) {
+async function recognizeFoodComponents({ imageBuffer, mimeType, timeoutMs }) {
   return callGeminiResult({
+    timeoutMs,
     prompt: COMPONENT_RECOGNITION_PROMPT,
     responseSchema: COMPONENT_RECOGNITION_RESPONSE_SCHEMA,
     imageBuffer,
@@ -113,8 +123,9 @@ async function recognizeFoodComponents({ imageBuffer, mimeType }) {
 
 // change 012-voice-food-input: text-only parsing, same transport and limits.
 // Only the transcript text is sent, never audio (design.md D1/D3).
-async function parseFoodTextGemini({ text }) {
+async function parseFoodTextGemini({ text, timeoutMs }) {
   return callGemini({
+    timeoutMs,
     prompt: FOOD_TEXT_PARSE_PROMPT,
     responseSchema: FOOD_TEXT_PARSE_RESPONSE_SCHEMA,
     userText: text,
@@ -124,8 +135,9 @@ async function parseFoodTextGemini({ text }) {
 
 // change 020-paste-nutrition-text: free-text nutrition reading. Only text is
 // sent; the same core rules as the image route (design D1/D2).
-async function parseNutritionTextGemini({ text }) {
+async function parseNutritionTextGemini({ text, timeoutMs }) {
   return callGemini({
+    timeoutMs,
     prompt: NUTRITION_TEXT_PROMPT,
     responseSchema: NUTRITION_READING_SCHEMA,
     userText: text,
@@ -134,8 +146,9 @@ async function parseNutritionTextGemini({ text }) {
   });
 }
 
-async function readNutritionImageGemini({ imageBuffer, mimeType }) {
+async function readNutritionImageGemini({ imageBuffer, mimeType, timeoutMs }) {
   return callGeminiResult({
+    timeoutMs,
     prompt: NUTRITION_IMAGE_PROMPT,
     responseSchema: NUTRITION_READING_SCHEMA,
     imageBuffer,

@@ -28,7 +28,7 @@ full design rationale and limits.
   `src/schema.js`), change 011.
 - `POST /parse-food-text` — JSON `{ "text": "..." }` (≤ `MAX_PARSE_TEXT_CHARS`), change 012.
   Transcript text only, never audio. Returns proposed food items with amount and unit
-  (see `src/schema.js`), never nutrition. Uses `GEMINI_TEXT_MODEL` (falls back to `GEMINI_MODEL`). Extra error:
+  (see `src/schema.js`), never nutrition. Uses `TEXT_PROVIDERS` (Gemini model: `GEMINI_TEXT_MODEL`, falls back to `GEMINI_MODEL`). Extra error:
   `400 { "error": "INVALID_TEXT" }`.
 - `POST /parse-nutrition-text` — JSON `{ "text": "..." }` (≤ `MAX_NUTRITION_TEXT_CHARS`,
   default 4000; body ≤ 32kb), change 020. Pasted or OCR'd text only. Returns a
@@ -63,6 +63,36 @@ full design rationale and limits.
 The mobile client maps every error code to the same plain-language,
 no-jargon "reading unavailable, use manual entry" message required by the
 `image-ai-access` spec — it never shows these codes to the user directly.
+
+## Model providers and fallback chain
+
+Every model route goes through an ordered provider chain (`src/providerChain.js`):
+the first provider is tried first; on timeout, 429, 5xx, a provider config
+error (4xx) or output that is not valid JSON / does not match the schema, the
+next one is tried. When all fail the route answers `502`/`504` exactly as before,
+so the mobile contract is unchanged.
+
+```
+TEXT_PROVIDERS=gemini,groq,glm    # /parse-food-text, /parse-nutrition-text
+IMAGE_PROVIDERS=gemini,groq,glm   # /extract-label, /recognize-food-components, /read-nutrition-image
+```
+
+- Providers: `gemini` (`src/geminiClient.js`), `groq` and `glm` (both via the
+  OpenAI-compatible client `src/openaiCompatClient.js`). Unset chain -> `PROVIDER`
+  (default `gemini`). Unknown names are skipped with a startup warning.
+- Only keys of providers in a chain are required (`GEMINI_API_KEY`,
+  `GROQ_API_KEY`, `GLM_API_KEY`).
+- Groq uses strict `json_schema` (schemas converted by `src/strictSchema.js`); GLM
+  uses JSON mode with the schema in the prompt. Both are validated locally
+  (`src/schemaValidator.js`) before anything reaches the app.
+- Budgets stay below the mobile timeouts (text 20s, image 55s):
+  `TEXT_DEADLINE_MS` 18000 / `TEXT_ATTEMPT_TIMEOUT_MS` 8000,
+  `IMAGE_DEADLINE_MS` 50000 / `IMAGE_ATTEMPT_TIMEOUT_MS` 25000. Every attempt but
+  the last is capped by the attempt timeout.
+- A provider answering 429 is skipped for `PROVIDER_COOLDOWN_MS` (default 60000).
+- Logs stay metadata-only and add `provider` and `fallbacks: [{provider, reason}]`.
+- Fallback quality: Groq's vision model is a preview model and GLM's free models
+  are often slow/overloaded; for photos they are a last resort behind Gemini.
 
 ## Local run
 
@@ -99,7 +129,8 @@ git clone https://github.com/londomloto/mealora-model-proxy.git
 cd mealora-model-proxy
 npm ci --omit=dev
 cp .env.example .env && chmod 600 .env
-# edit .env, set GEMINI_API_KEY and PROXY_SHARED_TOKEN (openssl rand -hex 32)
+# edit .env, set GEMINI_API_KEY, GROQ_API_KEY, GLM_API_KEY, TEXT_PROVIDERS,
+# IMAGE_PROVIDERS and PROXY_SHARED_TOKEN (openssl rand -hex 32)
 npm i -g pm2
 pm2 start src/server.js --name mealora-model-proxy
 pm2 save
